@@ -36,11 +36,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const sectionsText = project.sections
-    .map((s) => `[${s.title.toUpperCase()}]\n${s.content}`)
+    .map((s: { title: string; content: string }) => `[${s.title.toUpperCase()}]\n${s.content}`)
     .join("\n\n---\n\n");
 
   const claimsText = project.claims
-    .map((c) => `Claim ${c.number}: ${c.content}`)
+    .map((c: { number: number; content: string }) => `Claim ${c.number}: ${c.content}`)
     .join("\n\n");
 
   const ai = getAIProvider();
