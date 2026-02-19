@@ -53,3 +53,4 @@ next-env.d.ts
 /app/generated/prisma
 prisma/dev.db
 prisma/*.db
+.env*.local
