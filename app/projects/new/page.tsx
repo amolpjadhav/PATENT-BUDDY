@@ -21,18 +21,28 @@ export default function NewProjectPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), jurisdiction }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Failed to create project");
-      const { project } = await res.json();
-      router.push(`/projects/${project.id}/interview`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-      setLoading(false);
-    }
+const res = await fetch("/api/projects", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ title: title.trim(), jurisdiction }),
+});
+
+const text = await res.text();
+const data = text ? JSON.parse(text) : null;
+
+if (!res.ok) {
+  throw new Error(data?.error || `Failed to create project (${res.status})`);
+}
+
+const projectId = data?.project?.id;
+if (!projectId) throw new Error("Server did not return project id");
+
+router.push(`/projects/${projectId}/interview`);
+
+} catch (err) {
+  setError(err instanceof Error ? err.message : "Something went wrong");
+  setLoading(false);
+}
   }
 
   return (
