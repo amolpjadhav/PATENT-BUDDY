@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAIProvider } from "@/lib/ai";
 import { buildQualityCheckPrompt } from "@/lib/prompts/quality";
-import { QualityIssue } from "@/types";
+import type { QualityIssue } from "@/types";
+import type { Prisma } from "@prisma/client";
 
 function getTokenList(req: NextRequest): string[] {
   const raw = req.cookies.get("patent_buddy_session")?.value;
@@ -14,33 +15,47 @@ function getTokenList(req: NextRequest): string[] {
   }
 }
 
+type ProjectWithSectionsAndClaims = Prisma.ProjectGetPayload<{
+  include: {
+    sections: true;
+    claims: true;
+  };
+}>;
+
 // POST /api/quality/[id] - run quality checks
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { id } = params;
   const tokens = getTokenList(req);
 
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: {
-      sections: { orderBy: { order: "asc" } },
-      claims: { orderBy: { number: "asc" } },
-    },
-  });
+  const project: ProjectWithSectionsAndClaims | null =
+    await prisma.project.findUnique({
+      where: { id },
+      include: {
+        sections: { orderBy: { order: "asc" } },
+        claims: { orderBy: { number: "asc" } },
+      },
+    });
 
   if (!project || !tokens.includes(project.token)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
   if (project.sections.length === 0) {
-    return NextResponse.json({ error: "No draft generated yet" }, { status: 400 });
+    return NextResponse.json(
+      { error: "No draft generated yet" },
+      { status: 400 }
+    );
   }
 
   const sectionsText = project.sections
-    .map((s: { title: string; content: string }) => `[${s.title.toUpperCase()}]\n${s.content}`)
+    .map((s) => `[${s.title.toUpperCase()}]\n${s.content}`)
     .join("\n\n---\n\n");
 
   const claimsText = project.claims
-    .map((c: { number: number; content: string }) => `Claim ${c.number}: ${c.content}`)
+    .map((c) => `Claim ${c.number}: ${c.content}`)
     .join("\n\n");
 
   const ai = getAIProvider();
@@ -61,9 +76,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       { temperature: 0.2, maxTokens: 2048 }
     );
 
-    const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    const parsed = JSON.parse(cleaned);
-    issues = parsed.issues ?? [];
+    const cleaned = raw
+      .replace(/```json\n?/g, "")
+      .replace(/```\n?/g, "")
+      .trim();
+
+    const parsed: unknown = JSON.parse(cleaned);
+
+    // Be defensive about AI output shape
+    const parsedIssues =
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "issues" in parsed &&
+      Array.isArray((parsed as any).issues)
+        ? ((parsed as any).issues as QualityIssue[])
+        : [];
+
+    issues = parsedIssues;
   } catch (err) {
     console.error("Quality check failed:", err);
     // Fall back to heuristic checks
@@ -125,23 +154,43 @@ function runHeuristicChecks(
     issues.push({
       severity: "warning",
       category: "completeness",
-      message: "Detailed description is very short. Consider adding more detail about how the invention works.",
+      message:
+        "Detailed description is very short. Consider adding more detail about how the invention works.",
       location: "Detailed Description",
     });
   }
 
   // Antecedent basis heuristic
   for (const claim of claims) {
-    const theMatches = [...claim.content.matchAll(/\bthe\s+([a-z][a-z\s]{1,30}?)(?:\s+of|\s+in|\s+for|[,;.])/gi)];
-    const saidMatches = [...claim.content.matchAll(/\bsaid\s+([a-z][a-z\s]{1,30}?)(?:\s+of|\s+in|\s+for|[,;.])/gi)];
+    const theMatches = [
+      ...claim.content.matchAll(
+        /\bthe\s+([a-z][a-z\s]{1,30}?)(?:\s+of|\s+in|\s+for|[,;.])/gi
+      ),
+    ];
+    const saidMatches = [
+      ...claim.content.matchAll(
+        /\bsaid\s+([a-z][a-z\s]{1,30}?)(?:\s+of|\s+in|\s+for|[,;.])/gi
+      ),
+    ];
 
     for (const match of [...theMatches, ...saidMatches]) {
       const term = match[1].trim().toLowerCase();
-      const hasAntecedent =
-        claim.content.toLowerCase().indexOf(`a ${term}`) < claim.content.toLowerCase().indexOf(match[0].toLowerCase()) ||
-        claim.content.toLowerCase().indexOf(`an ${term}`) < claim.content.toLowerCase().indexOf(match[0].toLowerCase());
 
-      if (!hasAntecedent && term.length > 2 && !["claim", "invention", "device", "method", "system"].includes(term)) {
+      const claimLower = claim.content.toLowerCase();
+      const refIndex = claimLower.indexOf(match[0].toLowerCase());
+
+      const aIndex = claimLower.indexOf(`a ${term}`);
+      const anIndex = claimLower.indexOf(`an ${term}`);
+
+      const hasAntecedent =
+        (aIndex !== -1 && aIndex < refIndex) ||
+        (anIndex !== -1 && anIndex < refIndex);
+
+      if (
+        !hasAntecedent &&
+        term.length > 2 &&
+        !["claim", "invention", "device", "method", "system"].includes(term)
+      ) {
         issues.push({
           severity: "warning",
           category: "antecedent_basis",
@@ -153,13 +202,14 @@ function runHeuristicChecks(
     }
   }
 
-  // Check abstract length
+  // Check abstract length (note: 150 words ≠ 1500 chars; keeping your original heuristic but improving wording)
   const abstract = sections.find((s) => s.type === "abstract");
   if (abstract && abstract.content.length > 1500) {
     issues.push({
       severity: "info",
       category: "completeness",
-      message: "Abstract exceeds 150 words. USPTO typically requires abstracts under 150 words.",
+      message:
+        "Abstract may be too long. USPTO typically requires abstracts under ~150 words.",
       location: "Abstract",
     });
   }
