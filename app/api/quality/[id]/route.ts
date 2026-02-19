@@ -35,13 +35,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   let aiIssues: QualityIssueInput[] = [];
 
   try {
-    const raw = await ai.complete(
-      [
-        { role: "system", content: "You are a patent quality checker. Return only valid JSON." },
-        { role: "user", content: buildQualityCheckPrompt(draftText) },
-      ],
-      { temperature: 0.2, maxTokens: 2048 }
-    );
+    const raw = await ai.generateText({
+      system: "You are a patent quality checker. Return only valid JSON.",
+      prompt: buildQualityCheckPrompt(draftText),
+      temperature: 0.2,
+    });
     const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const parsed = JSON.parse(cleaned) as { issues: QualityIssueInput[] };
     aiIssues = parsed.issues ?? [];

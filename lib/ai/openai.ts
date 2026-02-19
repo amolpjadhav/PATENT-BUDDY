@@ -1,5 +1,11 @@
+/**
+ * OpenAI provider — uses the standard OpenAI API.
+ * Requires OPENAI_API_KEY environment variable.
+ * Not used by default; GeminiProvider is the active provider.
+ * Swap in index.ts if you prefer OpenAI over Gemini.
+ */
 import OpenAI from "openai";
-import { AIMessage, AIOptions, AIProvider } from "./provider";
+import type { AIProvider, GenerateTextOptions } from "./provider";
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI;
@@ -10,12 +16,15 @@ export class OpenAIProvider implements AIProvider {
     this.model = model;
   }
 
-  async complete(messages: AIMessage[], options: AIOptions = {}): Promise<string> {
+  async generateText({ system, prompt, temperature = 0.4 }: GenerateTextOptions): Promise<string> {
     const response = await this.client.chat.completions.create({
       model: this.model,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      temperature: options.temperature ?? 0.4,
-      max_tokens: options.maxTokens ?? 4096,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: prompt },
+      ],
+      temperature,
+      max_tokens: 8192,
     });
     return response.choices[0]?.message?.content ?? "";
   }
