@@ -1,37 +1,32 @@
-export function buildQualityCheckPrompt(sections: string, claims: string): string {
-  return `You are a patent quality checker. Analyze the following patent draft for common issues.
+export function buildQualityCheckPrompt(draftText: string): string {
+  return `You are a patent quality checker. Analyze the following patent draft and find real, specific issues.
 
-SPECIFICATION SECTIONS:
-${sections}
+PATENT DRAFT:
+${draftText}
 
-CLAIMS:
-${claims}
+Check for:
+1. ANTECEDENT_BASIS — a claim uses "the X" or "said X" without first introducing "a X" or "an X"
+2. TERM_INCONSISTENCY — a term used in claims differs from how it's named in the detailed description
+3. MISSING_SUPPORT — a claim element or feature is not described anywhere in the specification
+4. VAGUE_TERM — a term is too vague to define the scope of protection (e.g., "about", "substantially", undefined relative terms)
 
-Check for these issues:
-1. ANTECEDENT BASIS: Claims use "the X" or "said X" without first introducing "a X" (or "an X")
-2. TERM CONSISTENCY: Terms used in claims that are NOT defined or used in the detailed description
-3. MISSING SUPPORT: Claim elements or features not described anywhere in the specification
-4. COMPLETENESS: Missing required sections or very thin sections
+For each real issue found, return JSON. Severity: HIGH = definite legal problem, MED = likely problem, LOW = suggestion.
 
-Return EXACTLY this JSON:
+Return EXACTLY this JSON (no markdown fences):
 {
   "issues": [
     {
-      "severity": "error",
-      "category": "antecedent_basis",
-      "message": "Claim 2 uses 'the widget' but 'a widget' is never introduced",
-      "location": "Claim 2"
+      "type": "ANTECEDENT_BASIS",
+      "severity": "HIGH",
+      "message": "Claim 2 references 'the sensor' but 'a sensor' is not introduced in Claim 1 or earlier in the same claim",
+      "metadata": { "location": "Claim 2" }
     }
   ]
 }
 
-Severity levels:
-- "error": Definite problem that must be fixed (antecedent basis, undefined terms)
-- "warning": Potential problem (weak support, vague language)
-- "info": Suggestion for improvement
+type values: ANTECEDENT_BASIS, TERM_INCONSISTENCY, MISSING_SUPPORT, VAGUE_TERM
+severity values: HIGH, MED, LOW
 
-Categories: "antecedent_basis", "term_consistency", "missing_support", "completeness"
-
-Be thorough but concise. Find real issues, not trivial ones.
-Return ONLY valid JSON, no markdown fences.`;
+Be specific. If no real issues, return { "issues": [] }.
+Return ONLY valid JSON.`;
 }

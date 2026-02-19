@@ -7,60 +7,50 @@ datasource db {
 }
 
 model Project {
-  id           String    @id @default(cuid())
-  token        String    @unique
-  title        String
-  inventorName String?
-  status       String    @default("draft")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  title              String
+  jurisdiction       String    @default("US")
+  interviewStep      Int       @default(0)
+  interviewCompleted Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  interview    Interview?
-  sections     Section[]
-  claims       Claim[]
-  qualityCheck QualityCheck?
+  answers       InterviewAnswer[]
+  sections      DraftSection[]
+  qualityIssues QualityIssue[]
 }
 
-model Interview {
+model InterviewAnswer {
   id          String   @id @default(cuid())
-  projectId   String   @unique
+  projectId   String
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  answers     String   @default("{}")
-  currentStep Int      @default(0)
-  completed   Boolean  @default(false)
+  questionKey String
+  answer      String
+  createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@unique([projectId, questionKey])
 }
 
-model Section {
+model DraftSection {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sectionKey String
+  content    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([projectId, sectionKey])
+}
+
+model QualityIssue {
   id        String   @id @default(cuid())
   projectId String
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   type      String
-  title     String
-  content   String
-  order     Int
-  updatedAt DateTime @updatedAt
-
-  @@unique([projectId, type])
-}
-
-model Claim {
-  id        String   @id @default(cuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  number    Int
-  claimType String   @default("independent")
-  content   String
-  dependsOn Int?
-  updatedAt DateTime @updatedAt
-
-  @@unique([projectId, number])
-}
-
-model QualityCheck {
-  id        String   @id @default(cuid())
-  projectId String   @unique
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  results   String   @default("[]")
-  runAt     DateTime @default(now())
+  severity  String
+  message   String
+  metadata  String   @default("{}")
+  createdAt DateTime @default(now())
 }

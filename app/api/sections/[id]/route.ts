@@ -1,39 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSessionIdsFromRequest } from "@/lib/session";
 
-function getTokenList(req: NextRequest): string[] {
-  const raw = req.cookies.get("patent_buddy_session")?.value;
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as string[];
-  } catch {
-    return [];
-  }
+function sessionIds(req: NextRequest) {
+  return getSessionIdsFromRequest(req.cookies.get("patent_buddy_session")?.value);
 }
 
-// PATCH /api/sections/[id] - update section content
+// PATCH /api/sections/[id] — update a DraftSection's content
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const tokens = getTokenList(req);
 
-  const section = await prisma.section.findUnique({
+  const section = await prisma.draftSection.findUnique({
     where: { id },
-    include: { project: true },
+    select: { projectId: true, content: true },
   });
 
-  if (!section || !tokens.includes(section.project.token)) {
+  if (!section || !sessionIds(req).includes(section.projectId)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
-  const body = await req.json();
-
-  const updated = await prisma.section.update({
+  const { content } = await req.json();
+  const updated = await prisma.draftSection.update({
     where: { id },
-    data: {
-      content: body.content ?? section.content,
-      title: body.title ?? section.title,
-      updatedAt: new Date(),
-    },
+    data: { content: content ?? section.content, updatedAt: new Date() },
   });
 
   return NextResponse.json({ section: updated });

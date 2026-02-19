@@ -1,95 +1,113 @@
+// ─── Section keys ────────────────────────────────────────────────────────────
+export const SECTION_KEYS = [
+  "TITLE",
+  "BACKGROUND",
+  "SUMMARY",
+  "DRAWINGS",
+  "DETAILED_DESC",
+  "ABSTRACT",
+  "CLAIMS",
+] as const;
+
+export type SectionKey = (typeof SECTION_KEYS)[number];
+
+export const SECTION_ORDER: SectionKey[] = [
+  "TITLE",
+  "BACKGROUND",
+  "SUMMARY",
+  "DRAWINGS",
+  "DETAILED_DESC",
+  "ABSTRACT",
+  "CLAIMS",
+];
+
+export const SECTION_LABELS: Record<SectionKey, string> = {
+  TITLE: "Title of Invention",
+  BACKGROUND: "Background of the Invention",
+  SUMMARY: "Summary of the Invention",
+  DRAWINGS: "Brief Description of Drawings",
+  DETAILED_DESC: "Detailed Description of Embodiments",
+  ABSTRACT: "Abstract",
+  CLAIMS: "Claims",
+};
+
+// ─── Quality issue enums ──────────────────────────────────────────────────────
+export const QUALITY_ISSUE_TYPES = [
+  "TERM_INCONSISTENCY",
+  "ANTECEDENT_BASIS",
+  "MISSING_SUPPORT",
+  "VAGUE_TERM",
+] as const;
+
+export type QualityIssueType = (typeof QUALITY_ISSUE_TYPES)[number];
+
+export const QUALITY_SEVERITIES = ["LOW", "MED", "HIGH"] as const;
+export type QualityIssueSeverity = (typeof QUALITY_SEVERITIES)[number];
+
+// ─── Interview answers ────────────────────────────────────────────────────────
+// Keys must match the `key` fields in /lib/interview/questions.ts
 export interface InterviewAnswers {
-  // Step 0: Basic Info
-  inventionTitle?: string;
-  inventorName?: string;
-  inventionField?: string;
-  problemSolved?: string;
-
-  // Step 1: How It Works
-  howItWorks?: string;
-  keyComponents?: string;
-  keySteps?: string;
-  materials?: string;
-
-  // Step 2: Novel Aspects
-  novelAspects?: string;
+  // Step 1 — The Invention
+  invention_title?: string;
+  one_sentence_summary?: string;
+  problem_statement?: string;
+  // Step 2 — Prior Art & Novelty
+  existing_solutions?: string;
+  what_is_new?: string;
+  // Step 3 — How It Works
+  core_components?: string;
+  system_overview?: string;
+  main_flow_steps?: string;
+  alternative_variations?: string;
+  // Step 4 — Technical Details
+  key_parameters?: string;
+  data_inputs_outputs?: string;
+  edge_cases_failures?: string;
+  // Step 5 — Value & Context
   advantages?: string;
-  differentiators?: string;
-
-  // Step 3: Embodiments
-  primaryEmbodiment?: string;
-  alternativeEmbodiments?: string;
-  optionalFeatures?: string;
-
-  // Step 4: Context
-  targetUsers?: string;
-  useEnvironment?: string;
-  priorArtKnown?: string;
-  priorArtDescription?: string;
+  example_use_case?: string;
+  user_roles?: string;
+  deployment_environment?: string;
+  // Step 6 — Compliance & Reference
+  security_privacy?: string;
+  performance_constraints?: string;
+  drawings_list?: string;
+  definitions_glossary?: string;
 }
 
-export type SectionType =
-  | "title"
-  | "field"
-  | "background"
-  | "summary"
-  | "brief_description"
-  | "detailed_description"
-  | "claims"
-  | "abstract";
-
-export interface SectionDraft {
-  type: SectionType;
-  title: string;
-  content: string;
-  order: number;
-}
-
-export interface ClaimDraft {
-  number: number;
-  claimType: "independent" | "dependent";
-  content: string;
-  dependsOn?: number;
-}
-
-export interface QualityIssue {
-  severity: "error" | "warning" | "info";
-  category: "antecedent_basis" | "term_consistency" | "missing_support" | "completeness";
-  message: string;
-  location?: string;
-}
-
-export interface ProjectWithRelations {
+// ─── DB row shapes ────────────────────────────────────────────────────────────
+export interface DraftSectionRow {
   id: string;
-  token: string;
-  title: string;
-  inventorName: string | null;
-  status: string;
+  projectId: string;
+  sectionKey: string;
+  content: string;
   createdAt: Date;
   updatedAt: Date;
-  interview: {
-    answers: string;
-    currentStep: number;
-    completed: boolean;
-  } | null;
-  sections: Array<{
-    id: string;
-    type: string;
-    title: string;
-    content: string;
-    order: number;
-    updatedAt: Date;
-  }>;
-  claims: Array<{
-    id: string;
-    number: number;
-    claimType: string;
-    content: string;
-    dependsOn: number | null;
-    updatedAt: Date;
-  }>;
-  qualityCheck: {
-    results: string;
-    runAt: Date;
-  } | null;
+}
+
+export interface QualityIssueRow {
+  id: string;
+  projectId: string;
+  type: string;
+  severity: string;
+  message: string;
+  metadata: string;
+  createdAt: Date;
+}
+
+export interface InterviewAnswerRow {
+  id: string;
+  projectId: string;
+  questionKey: string;
+  answer: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ─── Action input types ───────────────────────────────────────────────────────
+export interface QualityIssueInput {
+  type: QualityIssueType;
+  severity: QualityIssueSeverity;
+  message: string;
+  metadata?: Record<string, unknown>;
 }

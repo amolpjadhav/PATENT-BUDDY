@@ -5,32 +5,18 @@ import {
   TextRun,
   HeadingLevel,
   AlignmentType,
-  BorderStyle,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
 } from "docx";
+import { SECTION_ORDER, SECTION_LABELS, type SectionKey } from "@/types";
 
-interface Section {
-  type: string;
-  title: string;
+interface DraftSectionInput {
+  sectionKey: string;
   content: string;
-  order: number;
-}
-
-interface Claim {
-  number: number;
-  claimType: string;
-  content: string;
-  dependsOn: number | null;
 }
 
 interface ProjectData {
   title: string;
-  inventorName: string | null;
-  sections: Section[];
-  claims: Claim[];
+  jurisdiction: string;
+  sections: DraftSectionInput[];
 }
 
 function contentToParagraphs(content: string): Paragraph[] {
@@ -40,12 +26,7 @@ function contentToParagraphs(content: string): Paragraph[] {
     .map(
       (text) =>
         new Paragraph({
-          children: [
-            new TextRun({
-              text: text.trim(),
-              size: 24, // 12pt
-            }),
-          ],
+          children: [new TextRun({ text: text.trim(), size: 24 })],
           spacing: { after: 200 },
         })
     );
@@ -58,26 +39,14 @@ export async function buildDocx(project: ProjectData): Promise<Buffer> {
     day: "numeric",
   });
 
-  const sortedSections = [...project.sections].sort((a, b) => a.order - b.order);
+  const sectionMap = new Map(project.sections.map((s) => [s.sectionKey, s.content]));
 
-  const children: (Paragraph | Table)[] = [
+  const children: Paragraph[] = [
     // Confidential header
     new Paragraph({
       children: [
         new TextRun({
-          text: "CONFIDENTIAL — ATTORNEY-CLIENT PRIVILEGED (IF APPLICABLE)",
-          bold: true,
-          color: "CC0000",
-          size: 20,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
-    }),
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: "NOT LEGAL ADVICE — FOR INFORMATIONAL PURPOSES ONLY",
+          text: "CONFIDENTIAL — NOT LEGAL ADVICE — FOR INFORMATIONAL PURPOSES ONLY",
           bold: true,
           color: "CC0000",
           size: 20,
@@ -87,121 +56,64 @@ export async function buildDocx(project: ProjectData): Promise<Buffer> {
       spacing: { after: 400 },
     }),
 
-    // Title
+    // Title block
     new Paragraph({
       children: [
-        new TextRun({
-          text: project.title.toUpperCase(),
-          bold: true,
-          size: 32,
-        }),
+        new TextRun({ text: (sectionMap.get("TITLE") ?? project.title).toUpperCase(), bold: true, size: 32 }),
       ],
       heading: HeadingLevel.TITLE,
       alignment: AlignmentType.CENTER,
-      spacing: { after: 200 },
+      spacing: { after: 150 },
     }),
-
     new Paragraph({
-      children: [
-        new TextRun({
-          text: `Provisional Patent Application`,
-          size: 24,
-          italics: true,
-        }),
-      ],
+      children: [new TextRun({ text: `Provisional Patent Application — ${project.jurisdiction}`, size: 24, italics: true })],
       alignment: AlignmentType.CENTER,
       spacing: { after: 100 },
     }),
-
     new Paragraph({
-      children: [
-        new TextRun({
-          text: `Inventor: ${project.inventorName ?? "Not specified"}`,
-          size: 24,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
-    }),
-
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: `Date: ${now}`,
-          size: 24,
-        }),
-      ],
+      children: [new TextRun({ text: `Date: ${now}`, size: 24 })],
       alignment: AlignmentType.CENTER,
       spacing: { after: 600 },
     }),
   ];
 
-  // Add specification sections (skip title section - already in header)
-  for (const section of sortedSections) {
-    if (section.type === "title") continue;
+  // Sections in canonical order (skip TITLE — already in header)
+  for (const key of SECTION_ORDER) {
+    if (key === "TITLE") continue;
+    const content = sectionMap.get(key);
+    if (!content) continue;
+
+    const label = SECTION_LABELS[key as SectionKey] ?? key;
 
     children.push(
       new Paragraph({
-        children: [
-          new TextRun({
-            text: section.title.toUpperCase(),
-            bold: true,
-            size: 28,
-          }),
-        ],
+        children: [new TextRun({ text: label.toUpperCase(), bold: true, size: 28 })],
         heading: HeadingLevel.HEADING_1,
         spacing: { before: 400, after: 200 },
       })
     );
 
-    children.push(...contentToParagraphs(section.content));
-  }
-
-  // Claims section
-  if (project.claims.length > 0) {
-    children.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: "CLAIMS",
-            bold: true,
-            size: 28,
-          }),
-        ],
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 400, after: 200 },
-      }),
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: "What is claimed is:",
-            size: 24,
-            italics: true,
-          }),
-        ],
-        spacing: { after: 200 },
-      })
-    );
-
-    const sortedClaims = [...project.claims].sort((a, b) => a.number - b.number);
-    for (const claim of sortedClaims) {
+    // CLAIMS: render as numbered list (each line that starts with a number)
+    if (key === "CLAIMS") {
       children.push(
         new Paragraph({
-          children: [
-            new TextRun({
-              text: `${claim.number}. `,
-              bold: true,
-              size: 24,
-            }),
-            new TextRun({
-              text: claim.content,
-              size: 24,
-            }),
-          ],
+          children: [new TextRun({ text: "What is claimed is:", size: 24, italics: true })],
           spacing: { after: 200 },
-          indent: { left: 360 },
         })
       );
+      const claimLines = content.split("\n").filter((l) => l.trim());
+      for (const line of claimLines) {
+        const isNumbered = /^\d+\./.test(line.trim());
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: line.trim(), size: 24 })],
+            spacing: { after: 180 },
+            indent: isNumbered ? { left: 360 } : { left: 720 },
+          })
+        );
+      }
+    } else {
+      children.push(...contentToParagraphs(content));
     }
   }
 
@@ -209,30 +121,17 @@ export async function buildDocx(project: ProjectData): Promise<Buffer> {
     sections: [
       {
         properties: {
-          page: {
-            margin: {
-              top: 1440, // 1 inch
-              right: 1440,
-              bottom: 1440,
-              left: 1440,
-            },
-          },
+          page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } },
         },
         children,
       },
     ],
     styles: {
       default: {
-        document: {
-          run: {
-            font: "Times New Roman",
-            size: 24,
-          },
-        },
+        document: { run: { font: "Times New Roman", size: 24 } },
       },
     },
   });
 
-  const buffer = await Packer.toBuffer(doc);
-  return Buffer.from(buffer);
+  return Buffer.from(await Packer.toBuffer(doc));
 }

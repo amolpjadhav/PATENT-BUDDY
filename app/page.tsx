@@ -4,28 +4,21 @@ import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { formatDate, getStatusLabel } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
 async function getProjects() {
   const cookieStore = await cookies();
   const raw = cookieStore.get("patent_buddy_session")?.value;
   if (!raw) return [];
-
-  let tokenList: string[] = [];
-  try {
-    tokenList = JSON.parse(raw) as string[];
-  } catch {
-    return [];
-  }
-
-  if (tokenList.length === 0) return [];
+  let ids: string[] = [];
+  try { ids = JSON.parse(raw) as string[]; } catch { return []; }
+  if (ids.length === 0) return [];
 
   return prisma.project.findMany({
-    where: { token: { in: tokenList } },
+    where: { id: { in: ids } },
     orderBy: { updatedAt: "desc" },
     include: {
-      interview: { select: { currentStep: true, completed: true } },
-      _count: { select: { sections: true, claims: true } },
+      _count: { select: { answers: true, sections: true, qualityIssues: true } },
     },
   });
 }
@@ -39,11 +32,7 @@ export default async function HomePage() {
       <div className="text-center mb-12">
         <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium mb-4">
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-              clipRule="evenodd"
-            />
+            <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
           </svg>
           For solo inventors
         </div>
@@ -51,11 +40,11 @@ export default async function HomePage() {
           Draft Your Patent with <span className="text-blue-600">PatentBuddy</span>
         </h1>
         <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-8">
-          Answer a few guided questions about your invention. We&apos;ll generate a structured US provisional-style
-          patent application — including claims, descriptions, and abstract — ready for your attorney to review.
+          Answer guided questions about your invention. We&apos;ll generate a structured US provisional-style patent
+          application — sections, claims, and abstract — ready for your attorney to review.
         </p>
         <Link href="/projects/new">
-          <Button size="lg" className="shadow-sm">
+          <Button size="lg">
             Start a New Invention
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -67,12 +56,12 @@ export default async function HomePage() {
       {/* Feature grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-12">
         {[
-          { icon: "🎯", title: "Guided Interview", desc: "Step-by-step questions tailored to your invention" },
-          { icon: "⚡", title: "AI-Powered Draft", desc: "Generates sections, claims, and abstract in minutes" },
-          { icon: "✅", title: "Quality Checks", desc: "Flags antecedent basis issues, missing support, and more" },
-          { icon: "✏️", title: "Editable Sections", desc: "Review and refine every part of your application" },
-          { icon: "📄", title: "DOCX Export", desc: "Download a formatted Word document for your attorney" },
-          { icon: "🔒", title: "Confidential", desc: "Projects are private to your browser session" },
+          { icon: "🎯", title: "Guided Interview", desc: "5-step wizard tailored to your invention" },
+          { icon: "⚡", title: "AI Draft", desc: "Generates all 7 sections + claims in minutes" },
+          { icon: "✅", title: "Quality Checks", desc: "Flags antecedent basis, missing support, vague terms" },
+          { icon: "✏️", title: "Inline Editing", desc: "Refine every section and claim in the browser" },
+          { icon: "📄", title: "DOCX Export", desc: "Formatted Word document for your attorney" },
+          { icon: "🔒", title: "Confidential", desc: "Private to your browser session" },
         ].map((f) => (
           <Card key={f.title}>
             <CardContent className="py-4">
@@ -90,43 +79,46 @@ export default async function HomePage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-gray-900">Your Projects</h2>
             <Link href="/projects/new">
-              <Button variant="secondary" size="sm">
-                + New Project
-              </Button>
+              <Button variant="secondary" size="sm">+ New Project</Button>
             </Link>
           </div>
           <div className="space-y-3">
-            {projects.map((project) => (
-              <Link key={project.id} href={`/projects/${project.id}`} className="block">
-                <Card className="hover:border-blue-300 hover:shadow-md transition-all duration-200 cursor-pointer">
-                  <CardContent className="py-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <h3 className="font-medium text-gray-900 truncate">{project.title}</h3>
-                          <Badge
-                            variant={
-                              project.status === "generated" ? "success" : project.status === "complete" ? "info" : "warning"
-                            }
-                          >
-                            {getStatusLabel(project.status)}
-                          </Badge>
+            {projects.map((p) => {
+              const hasDraft = p._count.sections > 0;
+              const interviewDone = p.interviewCompleted;
+              const status = hasDraft ? "generated" : interviewDone ? "interview_done" : "draft";
+              return (
+                <Link key={p.id} href={`/projects/${p.id}`} className="block">
+                  <Card className="hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
+                    <CardContent className="py-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <h3 className="font-medium text-gray-900 truncate">{p.title}</h3>
+                            <Badge variant={hasDraft ? "success" : interviewDone ? "info" : "warning"}>
+                              {hasDraft ? "Draft Ready" : interviewDone ? "Interview Done" : "In Progress"}
+                            </Badge>
+                            {p.jurisdiction !== "US" && (
+                              <Badge variant="default">{p.jurisdiction}</Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
+                            <span>Updated {formatDate(p.updatedAt)}</span>
+                            {p._count.sections > 0 && <span>{p._count.sections} sections</span>}
+                            {p._count.qualityIssues > 0 && (
+                              <span className="text-orange-600">{p._count.qualityIssues} quality issues</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
-                          {project.inventorName && <span>By {project.inventorName}</span>}
-                          <span>Updated {formatDate(project.updatedAt)}</span>
-                          {project._count.sections > 0 && <span>{project._count.sections} sections</span>}
-                          {project._count.claims > 0 && <span>{project._count.claims} claims</span>}
-                        </div>
+                        <svg className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
                       </div>
-                      <svg className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
           </div>
         </div>
       )}

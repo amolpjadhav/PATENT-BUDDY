@@ -1,43 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildDocx } from "@/lib/docx";
+import { getSessionIdsFromRequest } from "@/lib/session";
 
-function getTokenList(req: NextRequest): string[] {
-  const raw = req.cookies.get("patent_buddy_session")?.value;
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as string[];
-  } catch {
-    return [];
-  }
-}
-
-// GET /api/export/[id] - export project as DOCX
+// GET /api/export/[id] — download project as DOCX
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const tokens = getTokenList(req);
-
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: {
-      sections: { orderBy: { order: "asc" } },
-      claims: { orderBy: { number: "asc" } },
-    },
-  });
-
-  if (!project || !tokens.includes(project.token)) {
+  const ids = getSessionIdsFromRequest(req.cookies.get("patent_buddy_session")?.value);
+  if (!ids.includes(id)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
+  const project = await prisma.project.findUnique({
+    where: { id },
+    include: { sections: true },
+  });
+
+  if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (project.sections.length === 0) {
     return NextResponse.json({ error: "No draft to export" }, { status: 400 });
   }
 
   const buffer = await buildDocx({
     title: project.title,
-    inventorName: project.inventorName,
+    jurisdiction: project.jurisdiction,
     sections: project.sections,
-    claims: project.claims,
   });
 
   const filename = `${project.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}_provisional.docx`;

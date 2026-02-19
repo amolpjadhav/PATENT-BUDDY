@@ -10,7 +10,6 @@ interface ExportPageProps {
   projectId: string;
   projectTitle: string;
   hasDraft: boolean;
-  claimsCount: number;
   sectionsCount: number;
   qualityErrorCount: number;
 }
@@ -19,7 +18,6 @@ export function ExportPage({
   projectId,
   projectTitle,
   hasDraft,
-  claimsCount,
   sectionsCount,
   qualityErrorCount,
 }: ExportPageProps) {
@@ -81,8 +79,8 @@ export function ExportPage({
                   <dd className="text-2xl font-bold text-gray-900">{sectionsCount}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-gray-500 uppercase tracking-wide mb-1">Claims</dt>
-                  <dd className="text-2xl font-bold text-gray-900">{claimsCount}</dd>
+                  <dt className="text-xs text-gray-500 uppercase tracking-wide mb-1">Quality Issues</dt>
+                  <dd className="text-2xl font-bold text-gray-900">{qualityErrorCount}</dd>
                 </div>
               </dl>
             </CardContent>
@@ -118,10 +116,11 @@ export function ExportPage({
               <h2 className="font-semibold text-gray-900 mb-3">What&apos;s included in the DOCX</h2>
               <ul className="space-y-2 text-sm text-gray-700">
                 {[
-                  "Confidential header with invention title and inventor name",
-                  "Field of the Invention",
+                  "Confidential header with invention title",
+                  "Title of Invention",
                   "Background of the Invention",
                   "Summary of the Invention",
+                  "Brief Description of Drawings",
                   "Detailed Description of Embodiments",
                   "Abstract",
                   "Complete claim set (independent + dependent claims)",

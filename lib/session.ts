@@ -1,14 +1,14 @@
-import { v4 as uuidv4 } from "uuid";
 import { cookies } from "next/headers";
 
 const SESSION_COOKIE = "patent_buddy_session";
-const TOKEN_LENGTH = 32;
+const COOKIE_OPTS = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  maxAge: 60 * 60 * 24 * 365, // 1 year
+  path: "/",
+};
 
-export function generateProjectToken(): string {
-  return uuidv4().replace(/-/g, "") + uuidv4().replace(/-/g, "").slice(0, TOKEN_LENGTH - 32);
-}
-
-export async function getSessionTokens(): Promise<string[]> {
+export async function getSessionProjectIds(): Promise<string[]> {
   const cookieStore = await cookies();
   const raw = cookieStore.get(SESSION_COOKIE)?.value;
   if (!raw) return [];
@@ -19,33 +19,29 @@ export async function getSessionTokens(): Promise<string[]> {
   }
 }
 
-export async function addTokenToSession(token: string): Promise<void> {
+export async function addProjectToSession(projectId: string): Promise<void> {
   const cookieStore = await cookies();
-  const existing = await getSessionTokens();
-  if (!existing.includes(token)) {
-    existing.push(token);
+  const existing = await getSessionProjectIds();
+  if (!existing.includes(projectId)) existing.push(projectId);
+  cookieStore.set(SESSION_COOKIE, JSON.stringify(existing), COOKIE_OPTS);
+}
+
+export async function removeProjectFromSession(projectId: string): Promise<void> {
+  const cookieStore = await cookies();
+  const existing = await getSessionProjectIds();
+  cookieStore.set(
+    SESSION_COOKIE,
+    JSON.stringify(existing.filter((id) => id !== projectId)),
+    COOKIE_OPTS
+  );
+}
+
+/** Read project IDs from a raw Request cookie header (for API routes). */
+export function getSessionIdsFromRequest(cookieValue: string | undefined): string[] {
+  if (!cookieValue) return [];
+  try {
+    return JSON.parse(cookieValue) as string[];
+  } catch {
+    return [];
   }
-  cookieStore.set(SESSION_COOKIE, JSON.stringify(existing), {
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365, // 1 year
-    path: "/",
-  });
-}
-
-export async function removeTokenFromSession(token: string): Promise<void> {
-  const cookieStore = await cookies();
-  const existing = await getSessionTokens();
-  const updated = existing.filter((t) => t !== token);
-  cookieStore.set(SESSION_COOKIE, JSON.stringify(updated), {
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-    path: "/",
-  });
-}
-
-export async function hasAccessToProject(token: string): Promise<boolean> {
-  const tokens = await getSessionTokens();
-  return tokens.includes(token);
 }

@@ -1,84 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { generateProjectToken } from "@/lib/session";
+import { getSessionIdsFromRequest } from "@/lib/session";
 import { z } from "zod";
 
 const CreateProjectSchema = z.object({
-  title: z.string().min(3).max(200),
-  inventorName: z.string().optional(),
+  title: z.string().min(1).max(200),
+  jurisdiction: z.string().optional(),
 });
 
-// GET /api/projects - list projects by session tokens
+// GET /api/projects — list projects for this session
 export async function GET(req: NextRequest) {
-  const tokens = req.cookies.get("patent_buddy_session")?.value;
-  if (!tokens) return NextResponse.json({ projects: [] });
-
-  let tokenList: string[];
-  try {
-    tokenList = JSON.parse(tokens) as string[];
-  } catch {
-    return NextResponse.json({ projects: [] });
-  }
+  const ids = getSessionIdsFromRequest(req.cookies.get("patent_buddy_session")?.value);
+  if (ids.length === 0) return NextResponse.json({ projects: [] });
 
   const projects = await prisma.project.findMany({
-    where: { token: { in: tokenList } },
+    where: { id: { in: ids } },
     orderBy: { updatedAt: "desc" },
     include: {
-      interview: { select: { currentStep: true, completed: true } },
-      sections: { select: { id: true } },
-      claims: { select: { id: true } },
+      _count: { select: { answers: true, sections: true, qualityIssues: true } },
     },
   });
 
   return NextResponse.json({ projects });
 }
 
-// POST /api/projects - create a new project
+// POST /api/projects — create project
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const parsed = CreateProjectSchema.safeParse(body);
-
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid input", details: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
-
-  const token = generateProjectToken();
 
   const project = await prisma.project.create({
     data: {
-      token,
-      title: parsed.data.title,
-      inventorName: parsed.data.inventorName,
-      interview: {
-        create: {
-          answers: "{}",
-          currentStep: 0,
-          completed: false,
-          updatedAt: new Date(),
-        },
-      },
+      title: parsed.data.title.trim(),
+      jurisdiction: parsed.data.jurisdiction ?? "US",
     },
   });
 
-  // Add token to session cookie
-  const existingTokens = req.cookies.get("patent_buddy_session")?.value;
-  let tokenList: string[] = [];
-  if (existingTokens) {
-    try {
-      tokenList = JSON.parse(existingTokens) as string[];
-    } catch {
-      tokenList = [];
-    }
-  }
-  tokenList.push(token);
+  const existing = getSessionIdsFromRequest(req.cookies.get("patent_buddy_session")?.value);
+  if (!existing.includes(project.id)) existing.push(project.id);
 
-  const response = NextResponse.json({ project, token });
-  response.cookies.set("patent_buddy_session", JSON.stringify(tokenList), {
+  const response = NextResponse.json({ project });
+  response.cookies.set("patent_buddy_session", JSON.stringify(existing), {
     httpOnly: true,
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 365,
     path: "/",
   });
-
   return response;
 }

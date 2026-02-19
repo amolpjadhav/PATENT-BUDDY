@@ -1,128 +1,68 @@
 import { InterviewAnswers } from "@/types";
 
 export const DRAFT_SYSTEM_PROMPT = `You are a patent drafting assistant helping solo inventors write US provisional patent applications.
-You write clear, detailed, and legally structured patent specification sections.
-Use consistent terminology throughout all sections.
-Write in formal patent language but keep it understandable.
-Do NOT provide legal advice - your output is a draft for informational purposes only.
-IMPORTANT: Mark this as CONFIDENTIAL in all outputs.`;
+Write clear, detailed, legally structured patent specification sections using consistent terminology.
+Write in formal patent language. Do NOT provide legal advice — this is a draft for informational purposes only.
+Mark all outputs as CONFIDENTIAL.`;
 
 export function buildDraftPrompt(answers: InterviewAnswers): string {
-  return `Based on the following invention disclosure, generate a complete US provisional patent application specification.
+  return `Based on the following invention disclosure, generate a complete US provisional patent application.
 
 INVENTION DETAILS:
-Title: ${answers.inventionTitle ?? "Untitled Invention"}
-Field: ${answers.inventionField ?? "Not specified"}
-Problem Solved: ${answers.problemSolved ?? "Not specified"}
-How It Works: ${answers.howItWorks ?? "Not specified"}
-Key Components: ${answers.keyComponents ?? "Not specified"}
-Key Steps/Process: ${answers.keySteps ?? "Not specified"}
-Materials Used: ${answers.materials ?? "Not specified"}
-Novel Aspects: ${answers.novelAspects ?? "Not specified"}
+Title: ${answers.invention_title ?? "Untitled Invention"}
+Summary: ${answers.one_sentence_summary ?? "Not specified"}
+Problem Solved: ${answers.problem_statement ?? "Not specified"}
+Existing Solutions / Prior Art: ${answers.existing_solutions ?? "Not specified"}
+Novel Aspects: ${answers.what_is_new ?? "Not specified"}
+Core Components: ${answers.core_components ?? "Not specified"}
+System Overview / How It Works: ${answers.system_overview ?? "Not specified"}
+Step-by-Step Process: ${answers.main_flow_steps ?? "Not specified"}
+Alternative Variations: ${answers.alternative_variations ?? "Not specified"}
+Key Parameters & Specs: ${answers.key_parameters ?? "Not specified"}
+Inputs & Outputs: ${answers.data_inputs_outputs ?? "Not specified"}
+Edge Cases & Failure Modes: ${answers.edge_cases_failures ?? "Not specified"}
 Advantages: ${answers.advantages ?? "Not specified"}
-Differentiators from Prior Art: ${answers.differentiators ?? "Not specified"}
-Primary Embodiment: ${answers.primaryEmbodiment ?? "Not specified"}
-Alternative Embodiments: ${answers.alternativeEmbodiments ?? "Not specified"}
-Optional Features: ${answers.optionalFeatures ?? "Not specified"}
-Target Users: ${answers.targetUsers ?? "Not specified"}
-Use Environment: ${answers.useEnvironment ?? "Not specified"}
+Example Use Case: ${answers.example_use_case ?? "Not specified"}
+User Roles: ${answers.user_roles ?? "Not specified"}
+Deployment Environment: ${answers.deployment_environment ?? "Not specified"}
+Security & Privacy: ${answers.security_privacy ?? "Not specified"}
+Performance Constraints: ${answers.performance_constraints ?? "Not specified"}
+Drawings: ${answers.drawings_list ?? "Not specified"}
+Definitions: ${answers.definitions_glossary ?? "Not specified"}
 
-Generate EXACTLY the following JSON structure with these sections:
+Generate EXACTLY this JSON structure (no markdown fences):
 {
   "sections": [
     {
-      "type": "title",
-      "title": "Title of Invention",
-      "content": "...",
-      "order": 0
+      "sectionKey": "TITLE",
+      "content": "A short, descriptive title for the invention"
     },
     {
-      "type": "field",
-      "title": "Field of the Invention",
-      "content": "...",
-      "order": 1
+      "sectionKey": "BACKGROUND",
+      "content": "2-4 paragraphs: the technical field, the problem, and shortcomings of existing solutions"
     },
     {
-      "type": "background",
-      "title": "Background of the Invention",
-      "content": "...",
-      "order": 2
+      "sectionKey": "SUMMARY",
+      "content": "2-3 paragraphs summarizing the invention and its key benefits"
     },
     {
-      "type": "summary",
-      "title": "Summary of the Invention",
-      "content": "...",
-      "order": 3
+      "sectionKey": "DRAWINGS",
+      "content": "Brief description of figures, e.g. 'FIG. 1 is a perspective view...'. If no drawings, write: 'No drawings are included with this provisional application.'"
     },
     {
-      "type": "brief_description",
-      "title": "Brief Description",
-      "content": "...",
-      "order": 4
+      "sectionKey": "DETAILED_DESC",
+      "content": "4-8 detailed paragraphs covering all components, how they interact, and all embodiments. Use reference numerals consistently, e.g. 'housing (100)', 'sensor module (102)'. This is the most important section."
     },
     {
-      "type": "detailed_description",
-      "title": "Detailed Description of Embodiments",
-      "content": "...",
-      "order": 5
+      "sectionKey": "ABSTRACT",
+      "content": "One paragraph, 150 words max, summarizing the invention"
     },
     {
-      "type": "abstract",
-      "title": "Abstract",
-      "content": "...",
-      "order": 6
+      "sectionKey": "CLAIMS",
+      "content": "Full numbered claim set. Format:\n1. A [device/method/system] comprising: ...\n2. The [device/method/system] of claim 1, wherein ...\n\nRules: 1-3 broad independent claims using 'comprising'; 4-8 narrowing dependent claims. Use exact terms from DETAILED_DESC. Each claim is one sentence ending with a period."
     }
   ]
 }
 
-Guidelines:
-- Field: 1-2 sentences describing the technical field
-- Background: 2-4 paragraphs describing the problem and existing solutions' shortcomings
-- Summary: 2-3 paragraphs summarizing the invention and its benefits
-- Brief Description: List figures if applicable, or note "no drawings" for text-only
-- Detailed Description: This is the most important section. Write 4-8 detailed paragraphs covering all components, how they work together, and all embodiments. Use reference numerals like "first component (100)" consistently
-- Abstract: 1 paragraph, 150 words max
-
-Return ONLY valid JSON, no markdown fences.`;
-}
-
-export function buildClaimsPrompt(answers: InterviewAnswers, detailedDescription: string): string {
-  return `Based on this invention and its detailed description, generate a patent claim set.
-
-INVENTION TITLE: ${answers.inventionTitle ?? "Untitled"}
-NOVEL ASPECTS: ${answers.novelAspects ?? "Not specified"}
-KEY COMPONENTS: ${answers.keyComponents ?? "Not specified"}
-HOW IT WORKS: ${answers.howItWorks ?? "Not specified"}
-
-DETAILED DESCRIPTION (for consistency):
-${detailedDescription.slice(0, 2000)}
-
-Generate EXACTLY this JSON:
-{
-  "claims": [
-    {
-      "number": 1,
-      "claimType": "independent",
-      "content": "A [device/method/system] comprising: ...",
-      "dependsOn": null
-    },
-    {
-      "number": 2,
-      "claimType": "dependent",
-      "content": "The [device/method/system] of claim 1, wherein ...",
-      "dependsOn": 1
-    }
-  ]
-}
-
-Rules:
-- Write 1-3 independent claims covering different aspects (device, method, system if applicable)
-- Write 3-8 dependent claims that narrow down specific features
-- Independent claims must use "comprising" language
-- Dependent claims must reference their parent claim explicitly
-- Use the EXACT same terms as in the detailed description
-- Each claim should be one sentence ending with a period
-- Claim 1 is the broadest independent claim
-
-Return ONLY valid JSON, no markdown fences.`;
+Return ONLY valid JSON.`;
 }
