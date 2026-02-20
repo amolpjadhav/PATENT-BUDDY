@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { InterviewWizard } from "@/components/InterviewWizard";
+import { DynamicInterviewWizard } from "@/components/DynamicInterviewWizard";
+import { InterviewLoadingScreen } from "@/components/InterviewLoadingScreen";
 import type { InterviewAnswers } from "@/types";
 
 async function getProject(id: string) {
@@ -13,7 +15,10 @@ async function getProject(id: string) {
 
   return prisma.project.findUnique({
     where: { id },
-    include: { answers: true },
+    include: {
+      answers: true,
+      questions: { orderBy: { order: "asc" } },
+    },
   });
 }
 
@@ -22,12 +27,37 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   const project = await getProject(id);
   if (!project) notFound();
 
-  // Reconstruct InterviewAnswers object from individual rows
+  const questions = project.questions;
+
+  // ── Dynamic path: AI-generated questions exist ─────────────────────────────
+  if (questions.length > 0) {
+    // Build answer map keyed by question ID
+    const initialAnswers: Record<string, string> = Object.fromEntries(
+      project.answers.map((a) => [a.questionKey, a.answer])
+    );
+
+    return (
+      <DynamicInterviewWizard
+        projectId={id}
+        projectTitle={project.title}
+        questions={questions}
+        initialAnswers={initialAnswers}
+        initialStep={project.interviewStep}
+        completed={project.interviewCompleted}
+      />
+    );
+  }
+
+  // ── Loading path: intake notes provided but questions not yet generated ─────
+  if (project.intakeNotes) {
+    return <InterviewLoadingScreen projectId={id} />;
+  }
+
+  // ── Legacy path: no intake, use static wizard ──────────────────────────────
   const initialAnswers: InterviewAnswers = Object.fromEntries(
     project.answers.map((a) => [a.questionKey, a.answer])
   ) as InterviewAnswers;
 
-  // Wizard manages its own layout (sidebar + main)
   return (
     <InterviewWizard
       projectId={id}

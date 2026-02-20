@@ -86,10 +86,17 @@ export default async function HomePage() {
             {projects.map((p) => {
               const hasDraft = p._count.sections > 0;
               const interviewDone = p.interviewCompleted;
-              const status = hasDraft ? "generated" : interviewDone ? "interview_done" : "draft";
+              const inProgress = !interviewDone && !hasDraft;
+              const totalSteps = 6;
               return (
-                <Link key={p.id} href={`/projects/${p.id}`} className="block">
-                  <Card className="hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
+                <div key={p.id} className="relative group">
+                  {/* Stretched base link — covers whole card, goes to project detail */}
+                  <Link
+                    href={`/projects/${p.id}`}
+                    className="absolute inset-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
+                    aria-label={p.title}
+                  />
+                  <Card className="group-hover:border-blue-300 group-hover:shadow-md transition-all">
                     <CardContent className="py-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
@@ -104,9 +111,65 @@ export default async function HomePage() {
                           </div>
                           <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
                             <span>Updated {formatDate(p.updatedAt)}</span>
+                            {inProgress && p.interviewStep > 0 && (
+                              <span>Step {p.interviewStep + 1} of {totalSteps}</span>
+                            )}
                             {p._count.sections > 0 && <span>{p._count.sections} sections</span>}
                             {p._count.qualityIssues > 0 && (
                               <span className="text-orange-600">{p._count.qualityIssues} quality issues</span>
+                            )}
+                          </div>
+                          {/* Step progress pips for in-progress interviews */}
+                          {inProgress && (
+                            <div className="flex gap-1 mt-2">
+                              {Array.from({ length: totalSteps }).map((_, i) => (
+                                <div
+                                  key={i}
+                                  className={`h-1 flex-1 rounded-full ${
+                                    i < p.interviewStep
+                                      ? "bg-green-400"
+                                      : i === p.interviewStep
+                                      ? "bg-blue-400"
+                                      : "bg-gray-200"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          )}
+                          {/* Quick action link — sits above the stretched base link via relative z-10 */}
+                          <div className="mt-2.5">
+                            {inProgress && (
+                              <Link
+                                href={`/projects/${p.id}/interview`}
+                                className="relative z-10 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                              >
+                                {p.interviewStep > 0 ? "Resume Interview" : "Start Interview"}
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </Link>
+                            )}
+                            {interviewDone && !hasDraft && (
+                              <Link
+                                href={`/projects/${p.id}/draft`}
+                                className="relative z-10 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                              >
+                                Generate Draft
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </Link>
+                            )}
+                            {hasDraft && (
+                              <Link
+                                href={`/projects/${p.id}/draft`}
+                                className="relative z-10 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                              >
+                                View Draft
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </Link>
                             )}
                           </div>
                         </div>
@@ -116,7 +179,7 @@ export default async function HomePage() {
                       </div>
                     </CardContent>
                   </Card>
-                </Link>
+                </div>
               );
             })}
           </div>

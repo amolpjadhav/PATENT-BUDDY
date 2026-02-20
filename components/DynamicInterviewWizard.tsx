@@ -6,24 +6,65 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
 import { Input } from "@/components/ui/Input";
-import {
-  INTERVIEW_STEPS,
-  InterviewStep,
-  Question,
-  computeCompleteness,
-  isStepComplete,
-  stepAnsweredCount,
-} from "@/lib/interview/questions";
-import { InterviewAnswers } from "@/types";
+import type { InterviewQuestionRow } from "@/types";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-interface InterviewWizardProps {
+interface DynamicInterviewWizardProps {
   projectId: string;
   projectTitle: string;
-  initialAnswers: InterviewAnswers;
+  questions: InterviewQuestionRow[];
+  initialAnswers: Record<string, string>; // questionId → answer
   initialStep: number;
   completed: boolean;
+}
+
+// ─── Derived step shape ───────────────────────────────────────────────────────
+
+interface DynamicStep {
+  idx: number;
+  category: string;
+  questions: InterviewQuestionRow[];
+}
+
+function buildSteps(questions: InterviewQuestionRow[]): DynamicStep[] {
+  const categoryOrder: string[] = [];
+  const grouped = new Map<string, InterviewQuestionRow[]>();
+
+  for (const q of questions) {
+    if (!grouped.has(q.category)) {
+      categoryOrder.push(q.category);
+      grouped.set(q.category, []);
+    }
+    grouped.get(q.category)!.push(q);
+  }
+
+  return categoryOrder.map((cat, idx) => ({
+    idx,
+    category: cat,
+    questions: grouped.get(cat)!,
+  }));
+}
+
+// ─── Completeness helpers ─────────────────────────────────────────────────────
+
+function computeDynamicCompleteness(
+  questions: InterviewQuestionRow[],
+  answers: Record<string, string>
+) {
+  const required = questions.filter((q) => q.required);
+  const answered = required.filter((q) => (answers[q.id] ?? "").trim().length > 0);
+  const pct = required.length === 0 ? 100 : Math.round((answered.length / required.length) * 100);
+  return { pct, answered: answered.length, total: required.length };
+}
+
+function isStepAnswered(step: DynamicStep, answers: Record<string, string>) {
+  const required = step.questions.filter((q) => q.required);
+  return required.every((q) => (answers[q.id] ?? "").trim().length > 0);
+}
+
+function stepAnsweredCount(step: DynamicStep, answers: Record<string, string>) {
+  return step.questions.filter((q) => (answers[q.id] ?? "").trim().length > 0).length;
 }
 
 // ─── Completeness ring (SVG) ──────────────────────────────────────────────────
@@ -72,12 +113,12 @@ function StepNavItem({
   isActive,
   onClick,
 }: {
-  step: InterviewStep;
+  step: DynamicStep;
   answers: Record<string, string>;
   isActive: boolean;
   onClick: () => void;
 }) {
-  const complete = isStepComplete(step, answers);
+  const complete = isStepAnswered(step, answers);
   const answered = stepAnsweredCount(step, answers);
   const total = step.questions.length;
 
@@ -105,14 +146,14 @@ function StepNavItem({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
           </svg>
         ) : (
-          step.id + 1
+          step.idx + 1
         )}
       </div>
 
       {/* Title + progress */}
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-medium truncate ${isActive ? "text-blue-900" : "text-gray-700"}`}>
-          {step.title}
+          {step.category}
         </p>
         <p className="text-xs text-gray-400 mt-0.5">
           {answered}/{total} answered
@@ -122,115 +163,53 @@ function StepNavItem({
   );
 }
 
-// ─── Example box (collapsible) ────────────────────────────────────────────────
-
-function ExampleBox({ example }: { example: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="mt-2">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors"
-      >
-        <svg
-          className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-90" : ""}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-        {open ? "Hide example" : "See an example"}
-      </button>
-      {open && (
-        <div className="mt-2 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs text-gray-600 whitespace-pre-line leading-relaxed">
-          {example}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Single question renderer ─────────────────────────────────────────────────
 
-function QuestionBlock({
+function DynamicQuestionBlock({
   question,
   index,
   value,
   onChange,
   error,
 }: {
-  question: Question;
+  question: InterviewQuestionRow;
   index: number;
   value: string;
   onChange: (val: string) => void;
   error?: string;
 }) {
-  const id = `q-${question.key}`;
+  const id = `q-${question.id}`;
 
   const renderInput = () => {
-    if (question.type === "textarea") {
+    if (question.answerType === "TEXT") {
       return (
-        <Textarea
+        <Input
           id={id}
-          rows={question.rows ?? 5}
-          placeholder={question.example ? "Type your answer here…" : undefined}
+          placeholder="Type your answer here…"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           error={error}
         />
       );
     }
-    if (question.type === "select") {
+    if (question.answerType === "BULLETS") {
       return (
-        <div className="space-y-1.5">
-          <select
-            id={id}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-colors"
-          >
-            <option value="">Select an option…</option>
-            {question.options?.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          {error && <p className="text-xs text-red-600">{error}</p>}
-        </div>
+        <Textarea
+          id={id}
+          rows={4}
+          placeholder={"• Point 1\n• Point 2\n• Point 3"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          error={error}
+        />
       );
     }
-    if (question.type === "multiselect") {
-      const selected = value ? value.split(",").filter(Boolean) : [];
-      return (
-        <div className="space-y-2">
-          {question.options?.map((o) => (
-            <label key={o.value} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={selected.includes(o.value)}
-                onChange={(e) => {
-                  const next = e.target.checked
-                    ? [...selected, o.value]
-                    : selected.filter((v) => v !== o.value);
-                  onChange(next.join(","));
-                }}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              {o.label}
-            </label>
-          ))}
-          {error && <p className="text-xs text-red-600">{error}</p>}
-        </div>
-      );
-    }
-    // text
+    // LONGTEXT (default)
     return (
-      <Input
+      <Textarea
         id={id}
-        placeholder={question.example ? "Type your answer here…" : undefined}
+        rows={6}
+        placeholder="Type your answer here…"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         error={error}
@@ -240,34 +219,24 @@ function QuestionBlock({
 
   return (
     <div className="space-y-2">
-      {/* Question number + title */}
+      {/* Question number + prompt */}
       <div className="flex items-baseline gap-2">
         <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
           {index + 1}
         </span>
         <label htmlFor={id} className="text-sm font-semibold text-gray-800">
-          {question.title}
-          {question.validation?.required && (
-            <span className="ml-1 text-red-500">*</span>
-          )}
+          {question.prompt}
+          {question.required && <span className="ml-1 text-red-500">*</span>}
         </label>
       </div>
 
-      {/* Prompt (question text) */}
-      <p className="text-base text-gray-700 pl-8">{question.prompt}</p>
-
       {/* Help text */}
-      <p className="text-xs text-gray-500 pl-8">{question.helpText}</p>
+      {question.helpText && (
+        <p className="text-xs text-gray-500 pl-8">{question.helpText}</p>
+      )}
 
       {/* Input */}
       <div className="pl-8">{renderInput()}</div>
-
-      {/* Example */}
-      {question.example && (
-        <div className="pl-8">
-          <ExampleBox example={question.example} />
-        </div>
-      )}
     </div>
   );
 }
@@ -325,9 +294,6 @@ function CompletionScreen({
       {error && (
         <div className="mb-5 w-full rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
           {error}
-          {error.toLowerCase().includes("api key") && (
-            <p className="mt-1 font-medium">Please set OPENAI_API_KEY in .env and restart the server.</p>
-          )}
         </div>
       )}
 
@@ -363,21 +329,20 @@ function CompletionScreen({
 
 // ─── Main wizard ──────────────────────────────────────────────────────────────
 
-export function InterviewWizard({
+export function DynamicInterviewWizard({
   projectId,
   projectTitle,
+  questions,
   initialAnswers,
   initialStep,
   completed: initialCompleted,
-}: InterviewWizardProps) {
+}: DynamicInterviewWizardProps) {
   const router = useRouter();
+  const steps = buildSteps(questions);
 
-  // Cast to a plain Record for the helpers in questions.ts
-  const [answers, setAnswers] = useState<Record<string, string>>(
-    initialAnswers as Record<string, string>
-  );
+  const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers);
   const [currentStepIdx, setCurrentStepIdx] = useState(
-    initialCompleted ? INTERVIEW_STEPS.length : Math.min(initialStep, INTERVIEW_STEPS.length - 1)
+    initialCompleted ? steps.length : Math.min(initialStep, Math.max(0, steps.length - 1))
   );
   const [isComplete, setIsComplete] = useState(initialCompleted);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -411,11 +376,11 @@ export function InterviewWizard({
     return () => clearInterval(id);
   }, [lastSavedAt]);
 
-  const completeness = computeCompleteness(answers);
+  const completeness = computeDynamicCompleteness(questions, answers);
   const canGenerate = completeness.pct === 100;
 
-  const step = INTERVIEW_STEPS[currentStepIdx];
-  const isLastStep = currentStepIdx === INTERVIEW_STEPS.length - 1;
+  const step = steps[currentStepIdx] ?? steps[0];
+  const isLastStep = currentStepIdx === steps.length - 1;
 
   // ── Shared save helper ─────────────────────────────────────────────────────
 
@@ -474,17 +439,16 @@ export function InterviewWizard({
   // ── Answer update ──────────────────────────────────────────────────────────
 
   const updateAnswer = useCallback(
-    (key: string, value: string) => {
+    (questionId: string, value: string) => {
       setAnswers((prev) => {
-        const next = { ...prev, [key]: value };
+        const next = { ...prev, [questionId]: value };
         answersRef.current = next;
         return next;
       });
-      // Clear field error on change
       setFieldErrors((prev) => {
-        if (!prev[key]) return prev;
+        if (!prev[questionId]) return prev;
         const next = { ...prev };
-        delete next[key];
+        delete next[questionId];
         return next;
       });
       scheduleSave();
@@ -492,25 +456,16 @@ export function InterviewWizard({
     [scheduleSave]
   );
 
-  // ── Visible questions (dependency filtering) ───────────────────────────────
-
-  const visibleQuestions = step.questions.filter((q) => {
-    if (!q.dependsOn) return true;
-    const depVal = answers[q.dependsOn.key] ?? "";
-    return q.dependsOn.values.includes(depVal);
-  });
-
   // ── Validate current step ──────────────────────────────────────────────────
 
   function validateStep(): boolean {
+    if (!step) return true;
     const errors: Record<string, string> = {};
-    for (const q of visibleQuestions) {
-      if (!q.validation?.required) continue;
-      const val = answers[q.key] ?? "";
+    for (const q of step.questions) {
+      if (!q.required) continue;
+      const val = answers[q.id] ?? "";
       if (!val.trim()) {
-        errors[q.key] = "This field is required.";
-      } else if (q.validation.minLength && val.trim().length < q.validation.minLength) {
-        errors[q.key] = `Please write at least ${q.validation.minLength} characters.`;
+        errors[q.id] = "This field is required.";
       }
     }
     setFieldErrors(errors);
@@ -521,12 +476,10 @@ export function InterviewWizard({
 
   async function handleNext() {
     if (!validateStep()) {
-      // Scroll to first error
-      const firstError = Object.keys(fieldErrors)[0] || visibleQuestions.find(
-        (q) => q.validation?.required && !(answers[q.key] ?? "").trim()
-      )?.key;
-      if (firstError) {
-        document.getElementById(`q-${firstError}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const firstErrorId = Object.keys(fieldErrors)[0] ||
+        step?.questions.find((q) => q.required && !(answers[q.id] ?? "").trim())?.id;
+      if (firstErrorId) {
+        document.getElementById(`q-${firstErrorId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
       }
       return;
     }
@@ -534,7 +487,7 @@ export function InterviewWizard({
     setSavingStep(true);
     try {
       const nextIdx = currentStepIdx + 1;
-      const complete = nextIdx >= INTERVIEW_STEPS.length;
+      const complete = nextIdx >= steps.length;
 
       if (debounceRef.current) clearTimeout(debounceRef.current);
       stepIdxRef.current = nextIdx;
@@ -592,11 +545,13 @@ export function InterviewWizard({
         completeness={completeness}
         onReview={() => {
           setIsComplete(false);
-          setCurrentStepIdx(INTERVIEW_STEPS.length - 1);
+          setCurrentStepIdx(steps.length - 1);
         }}
       />
     );
   }
+
+  if (!step) return null;
 
   // ── Main two-column layout ─────────────────────────────────────────────────
 
@@ -628,14 +583,14 @@ export function InterviewWizard({
 
         {/* Step list */}
         <nav className="flex-1 space-y-1 overflow-y-auto">
-          {INTERVIEW_STEPS.map((s) => (
+          {steps.map((s) => (
             <StepNavItem
-              key={s.id}
+              key={s.idx}
               step={s}
               answers={answers}
-              isActive={s.id === currentStepIdx}
+              isActive={s.idx === currentStepIdx}
               onClick={() => {
-                setCurrentStepIdx(s.id);
+                setCurrentStepIdx(s.idx);
                 setFieldErrors({});
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
@@ -718,18 +673,18 @@ export function InterviewWizard({
 
           {/* Mobile progress bar */}
           <div className="flex items-center gap-2 mb-1">
-            {INTERVIEW_STEPS.map((s, i) => (
+            {steps.map((s) => (
               <div
-                key={s.id}
+                key={s.idx}
                 className={`flex-1 h-1.5 rounded-full transition-colors ${
-                  i < currentStepIdx ? "bg-green-500" : i === currentStepIdx ? "bg-blue-500" : "bg-gray-200"
+                  s.idx < currentStepIdx ? "bg-green-500" : s.idx === currentStepIdx ? "bg-blue-500" : "bg-gray-200"
                 }`}
               />
             ))}
           </div>
           <div className="flex items-center justify-between text-xs text-gray-400">
             <span>
-              Step {currentStepIdx + 1} of {INTERVIEW_STEPS.length}
+              Step {currentStepIdx + 1} of {steps.length}
             </span>
             <div className="flex items-center gap-2">
               <span>{completeness.pct}% complete</span>
@@ -748,15 +703,13 @@ export function InterviewWizard({
         <div className="mb-7">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-semibold uppercase tracking-widest text-blue-500">
-              Step {step.id + 1} of {INTERVIEW_STEPS.length}
+              Step {step.idx + 1} of {steps.length}
             </span>
             {/* Autosave indicator */}
             <span
               className={`ml-auto text-xs transition-opacity ${
                 saveStatus === "idle" && !lastSavedAt ? "opacity-0" : "opacity-100"
-              } ${
-                saveStatus === "saved" ? "text-green-600" : "text-gray-400"
-              }`}
+              } ${saveStatus === "saved" ? "text-green-600" : "text-gray-400"}`}
             >
               {saveStatus === "pending" && "•••"}
               {saveStatus === "saving" && "Saving…"}
@@ -771,20 +724,22 @@ export function InterviewWizard({
               {saveStatus === "idle" && lastSavedAt && `Saved ${relativeTime}`}
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">{step.title}</h1>
-          <p className="text-sm text-gray-500 mt-1">{step.description}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{step.category}</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Answer the questions below to help us draft your patent.
+          </p>
         </div>
 
         {/* Questions */}
         <div className="space-y-8">
-          {visibleQuestions.map((q, i) => (
-            <QuestionBlock
-              key={q.key}
+          {step.questions.map((q, i) => (
+            <DynamicQuestionBlock
+              key={q.id}
               question={q}
               index={i}
-              value={answers[q.key] ?? ""}
-              onChange={(val) => updateAnswer(q.key, val)}
-              error={fieldErrors[q.key]}
+              value={answers[q.id] ?? ""}
+              onChange={(val) => updateAnswer(q.id, val)}
+              error={fieldErrors[q.id]}
             />
           ))}
         </div>

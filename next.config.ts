@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
     "/api/**": ["./lib/prompts/*.txt"],
     "/projects/**": ["./lib/prompts/*.txt"],
   },
+  // pdf-parse reads test PDF files relative to __dirname during module init.
+  // Marking it as external prevents Next.js from bundling it, preserving those paths.
+  serverExternalPackages: ["pdf-parse"],
 };
 
 export default nextConfig;

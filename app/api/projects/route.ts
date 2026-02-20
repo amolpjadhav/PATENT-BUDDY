@@ -6,6 +6,7 @@ import { z } from "zod";
 const CreateProjectSchema = z.object({
   title: z.string().min(1).max(200),
   jurisdiction: z.string().optional(),
+  intakeNotes: z.string().optional(),
 });
 
 // GET /api/projects — list projects for this session
@@ -32,12 +33,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
+  const intakeNotes = parsed.data.intakeNotes?.trim() || null;
   const project = await prisma.project.create({
     data: {
       title: parsed.data.title.trim(),
       jurisdiction: parsed.data.jurisdiction ?? "US",
+      intakeNotes,
     },
   });
+
+  // Store notes as a NOTES artifact so the pipeline can read it.
+  // Non-fatal — if the DB table doesn't exist yet the project is still created.
+  if (intakeNotes) {
+    try {
+      await prisma.projectArtifact.create({
+        data: { projectId: project.id, type: "NOTES", content: intakeNotes },
+      });
+    } catch (artifactErr) {
+      console.warn("[projects] Could not create NOTES artifact:", artifactErr);
+    }
+  }
 
   const existing = getSessionIdsFromRequest(req.cookies.get("patent_buddy_session")?.value);
   if (!existing.includes(project.id)) existing.push(project.id);

@@ -111,3 +111,42 @@ export interface QualityIssueInput {
   message: string;
   metadata?: Record<string, unknown>;
 }
+
+// ─── Intake pipeline types ────────────────────────────────────────────────────
+
+export interface ExtractedInventionJson {
+  problem: string;
+  solution: string;
+  novelty: string;
+  system_components: string;
+  method_steps: string;
+  alternatives: string;
+  advantages: string;
+  use_cases: string;
+  keywords: string;
+  potential_prior_art: string;
+}
+
+export type ArtifactType = "NOTES" | "PDF" | "AUDIO" | "VIDEO" | "TRANSCRIPT";
+export type AnswerType = "TEXT" | "BULLETS" | "LONGTEXT";
+
+export interface InterviewQuestionRow {
+  id: string;
+  projectId: string;
+  order: number;
+  category: string;
+  prompt: string;
+  helpText: string | null;
+  answerType: AnswerType;
+  required: boolean;
+  createdAt: Date;
+}
+
+export interface GeneratedQuestion {
+  order: number;
+  category: string;
+  prompt: string;
+  helpText?: string;
+  answerType: AnswerType;
+  required: boolean;
+}
