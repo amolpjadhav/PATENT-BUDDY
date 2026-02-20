@@ -57,10 +57,12 @@ export async function POST(
         "application/pdf"
       );
 
-      // Extract text — dynamic import avoids module-init issues in Next.js
+      // Extract text. pdf-parse is in serverExternalPackages so require() loads
+      // it as CJS from node_modules at runtime (no webpack bundling issues).
       let extractedText = "";
       try {
-        const pdfParse = (await import("pdf-parse")).default;
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
         const data = await pdfParse(buffer);
         extractedText = data.text.trim();
       } catch (err) {

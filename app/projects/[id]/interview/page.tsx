@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { InterviewWizard } from "@/components/InterviewWizard";
 import { DynamicInterviewWizard } from "@/components/DynamicInterviewWizard";
 import { InterviewLoadingScreen } from "@/components/InterviewLoadingScreen";
-import type { InterviewAnswers } from "@/types";
+import type { InterviewAnswers, InterviewQuestionRow } from "@/types";
 
 async function getProject(id: string) {
   const cookieStore = await cookies();
@@ -40,7 +40,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
       <DynamicInterviewWizard
         projectId={id}
         projectTitle={project.title}
-        questions={questions}
+        questions={questions as InterviewQuestionRow[]}
         initialAnswers={initialAnswers}
         initialStep={project.interviewStep}
         completed={project.interviewCompleted}
