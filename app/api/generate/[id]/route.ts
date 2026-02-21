@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionIdsFromRequest } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { requireAuthUser } from "@/lib/auth-helpers";
+import { checkRateLimit } from "@/lib/token-usage";
 import { generateAllDraft } from "@/lib/actions";
 import { generateAllDraftFromDynamic } from "@/lib/ai/generation";
 
 export const maxDuration = 120;
-
-function sessionIds(req: NextRequest) {
-  return getSessionIdsFromRequest(req.cookies.get("patent_buddy_session")?.value);
-}
 
 /**
  * POST /api/generate/[id]
@@ -20,18 +17,26 @@ function sessionIds(req: NextRequest) {
  * DISCLAIMER: AI output is a preliminary draft for informational purposes only.
  * It does NOT constitute legal advice.
  */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const authResult = await requireAuthUser();
+  if (authResult instanceof NextResponse) return authResult;
+  const { id: userId } = authResult;
 
-  if (!sessionIds(req).includes(id)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  const owned = await prisma.project.findUnique({ where: { id }, select: { userId: true } });
+  if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (owned.userId !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const limit = await checkRateLimit(userId);
+  if (!limit.allowed) {
+    return NextResponse.json({ error: "Daily limit reached", resetAt: limit.resetAt, remaining: 0 }, { status: 429 });
   }
 
   try {
     // Detect which pipeline to use
     const questionCount = await prisma.interviewQuestion.count({ where: { projectId: id } });
     const result = questionCount > 0
-      ? await generateAllDraftFromDynamic(id)
+      ? await generateAllDraftFromDynamic(id, userId)
       : await generateAllDraft(id);
 
     return NextResponse.json(result);

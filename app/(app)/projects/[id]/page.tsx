@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
-import { cookies } from "next/headers";
+import { notFound, redirect } from "next/navigation";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -8,14 +9,12 @@ import { formatDate } from "@/lib/utils";
 import { ProjectActions } from "@/components/ProjectActions";
 import { SECTION_LABELS, type SectionKey } from "@/types";
 
-async function getProject(id: string) {
-  const cookieStore = await cookies();
-  const raw = cookieStore.get("patent_buddy_session")?.value;
-  let ids: string[] = [];
-  try { ids = JSON.parse(raw ?? "[]"); } catch { ids = []; }
-  if (!ids.includes(id)) return null;
+export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) redirect("/");
 
-  return prisma.project.findUnique({
+  const project = await prisma.project.findUnique({
     where: { id },
     include: {
       sections: { orderBy: { createdAt: "asc" } },
@@ -23,12 +22,7 @@ async function getProject(id: string) {
       _count: { select: { answers: true } },
     },
   });
-}
-
-export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const project = await getProject(id);
-  if (!project) notFound();
+  if (!project || project.userId !== session.user.id) notFound();
 
   const hasDraft = project.sections.length > 0;
   const highIssues = project.qualityIssues.filter((i) => i.severity === "HIGH").length;

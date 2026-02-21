@@ -4,7 +4,7 @@
  * Model: gemini-2.0-flash (fast, high-quality, free tier available).
  */
 import OpenAI from "openai";
-import type { AIProvider, GenerateTextOptions } from "./provider";
+import type { AIProvider, GenerateTextOptions, GenerateTextResult } from "./provider";
 
 export class GeminiProvider implements AIProvider {
   private client: OpenAI;
@@ -18,7 +18,7 @@ export class GeminiProvider implements AIProvider {
     this.model = model;
   }
 
-  async generateText({ system, prompt, temperature = 0.4 }: GenerateTextOptions): Promise<string> {
+  async generateText({ system, prompt, temperature = 0.4 }: GenerateTextOptions): Promise<GenerateTextResult> {
     const maxRetries = 3;
     let lastError: unknown;
 
@@ -33,7 +33,15 @@ export class GeminiProvider implements AIProvider {
           temperature,
           max_tokens: 8192,
         });
-        return response.choices[0]?.message?.content ?? "";
+        return {
+          content: response.choices[0]?.message?.content ?? "",
+          usage: {
+            promptTokens: response.usage?.prompt_tokens ?? 0,
+            completionTokens: response.usage?.completion_tokens ?? 0,
+            totalTokens: response.usage?.total_tokens ?? 0,
+            model: this.model,
+          },
+        };
       } catch (err: unknown) {
         lastError = err;
         const status = (err as { status?: number })?.status;

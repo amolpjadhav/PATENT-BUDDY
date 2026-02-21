@@ -2,18 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAIProvider } from "@/lib/ai";
 import { buildQualityCheckPrompt } from "@/lib/prompts/quality";
-import { getSessionIdsFromRequest } from "@/lib/session";
+import { requireAuthUser } from "@/lib/auth-helpers";
+import { checkRateLimit, logUsage } from "@/lib/token-usage";
 import { SECTION_ORDER, SECTION_LABELS, type QualityIssueInput } from "@/types";
-
-function sessionIds(req: NextRequest) {
-  return getSessionIdsFromRequest(req.cookies.get("patent_buddy_session")?.value);
-}
 
 // POST /api/quality/[id] — run quality checks, persist individual QualityIssue rows
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!sessionIds(req).includes(id)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  const authResult = await requireAuthUser();
+  if (authResult instanceof NextResponse) return authResult;
+  const { id: userId } = authResult;
+
+  const owned = await prisma.project.findUnique({ where: { id }, select: { userId: true } });
+  if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (owned.userId !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const limit = await checkRateLimit(userId);
+  if (!limit.allowed) {
+    return NextResponse.json({ error: "Daily limit reached", resetAt: limit.resetAt, remaining: 0 }, { status: 429 });
   }
 
   const sections = await prisma.draftSection.findMany({ where: { projectId: id } });
@@ -35,12 +41,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   let aiIssues: QualityIssueInput[] = [];
 
   try {
-    const raw = await ai.generateText({
+    const result = await ai.generateText({
       system: "You are a patent quality checker. Return only valid JSON.",
       prompt: buildQualityCheckPrompt(draftText),
       temperature: 0.2,
     });
-    const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    await logUsage({ userId, projectId: id, operation: "QUALITY_CHECK", usage: result.usage });
+    const cleaned = result.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const parsed = JSON.parse(cleaned) as { issues: QualityIssueInput[] };
     aiIssues = parsed.issues ?? [];
   } catch (err) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionIdsFromRequest } from "@/lib/session";
+import { requireAuthUser } from "@/lib/auth-helpers";
 import { z } from "zod";
 
 const CreateProjectSchema = z.object({
@@ -9,13 +9,14 @@ const CreateProjectSchema = z.object({
   intakeNotes: z.string().optional(),
 });
 
-// GET /api/projects — list projects for this session
-export async function GET(req: NextRequest) {
-  const ids = getSessionIdsFromRequest(req.cookies.get("patent_buddy_session")?.value);
-  if (ids.length === 0) return NextResponse.json({ projects: [] });
+// GET /api/projects — list projects for this user
+export async function GET() {
+  const authResult = await requireAuthUser();
+  if (authResult instanceof NextResponse) return authResult;
+  const { id: userId } = authResult;
 
   const projects = await prisma.project.findMany({
-    where: { id: { in: ids } },
+    where: { userId },
     orderBy: { updatedAt: "desc" },
     include: {
       _count: { select: { answers: true, sections: true, qualityIssues: true } },
@@ -27,6 +28,10 @@ export async function GET(req: NextRequest) {
 
 // POST /api/projects — create project
 export async function POST(req: NextRequest) {
+  const authResult = await requireAuthUser();
+  if (authResult instanceof NextResponse) return authResult;
+  const { id: userId } = authResult;
+
   const body = await req.json();
   const parsed = CreateProjectSchema.safeParse(body);
   if (!parsed.success) {
@@ -39,11 +44,11 @@ export async function POST(req: NextRequest) {
       title: parsed.data.title.trim(),
       jurisdiction: parsed.data.jurisdiction ?? "US",
       intakeNotes,
+      userId,
     },
   });
 
-  // Store notes as a NOTES artifact so the pipeline can read it.
-  // Non-fatal — if the DB table doesn't exist yet the project is still created.
+  // Store notes as a NOTES artifact so the pipeline can read it. Non-fatal.
   if (intakeNotes) {
     try {
       await prisma.projectArtifact.create({
@@ -54,15 +59,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const existing = getSessionIdsFromRequest(req.cookies.get("patent_buddy_session")?.value);
-  if (!existing.includes(project.id)) existing.push(project.id);
-
-  const response = NextResponse.json({ project });
-  response.cookies.set("patent_buddy_session", JSON.stringify(existing), {
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-    path: "/",
-  });
-  return response;
+  return NextResponse.json({ project });
 }

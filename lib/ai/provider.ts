@@ -7,6 +7,18 @@ export interface GenerateTextOptions {
   temperature?: number;
 }
 
+export interface TokenUsageData {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  model: string;
+}
+
+export interface GenerateTextResult {
+  content: string;
+  usage: TokenUsageData;
+}
+
 export interface AIProvider {
-  generateText(options: GenerateTextOptions): Promise<string>;
+  generateText(options: GenerateTextOptions): Promise<GenerateTextResult>;
 }

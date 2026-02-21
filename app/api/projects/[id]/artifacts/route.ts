@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionIdsFromRequest } from "@/lib/session";
+import { requireAuthUser } from "@/lib/auth-helpers";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const maxDuration = 60;
@@ -9,10 +9,6 @@ export const maxDuration = 60;
 // Without it, files are not stored externally but extracted content is still
 // persisted in the DB and used for question generation.
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
-
-function sessionIds(req: NextRequest) {
-  return getSessionIdsFromRequest(req.cookies.get("patent_buddy_session")?.value);
-}
 
 async function uploadToBlob(path: string, buffer: Buffer, contentType: string): Promise<string | null> {
   if (!BLOB_TOKEN) return null;
@@ -33,9 +29,13 @@ export async function POST(
   const { id } = await params;
 
   try {
-    if (!sessionIds(req).includes(id)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    const authResult = await requireAuthUser();
+    if (authResult instanceof NextResponse) return authResult;
+    const { id: userId } = authResult;
+
+    const owned = await prisma.project.findUnique({ where: { id }, select: { userId: true } });
+    if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (owned.userId !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const formData = await req.formData();
     const type = formData.get("type") as string;

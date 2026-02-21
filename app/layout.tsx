@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { DisclaimerBanner } from "@/components/DisclaimerBanner";
+import { Providers } from "./providers";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -20,8 +20,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body className={`${inter.variable} font-sans antialiased bg-gray-50 min-h-full`}>
-        <DisclaimerBanner />
-        <div className="min-h-screen">{children}</div>
+        <Providers>
+          <div className="min-h-screen">{children}</div>
+        </Providers>
       </body>
     </html>
   );

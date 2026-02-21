@@ -38,4 +38,4 @@ export function getAIProvider(): AIProvider {
   return _provider;
 }
 
-export type { AIProvider, GenerateTextOptions } from "./provider";
+export type { AIProvider, GenerateTextOptions, GenerateTextResult, TokenUsageData } from "./provider";

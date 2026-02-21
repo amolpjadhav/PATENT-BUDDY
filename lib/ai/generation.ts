@@ -12,6 +12,7 @@ import { getAIProvider } from "./index";
 import { buildDraftSectionsPrompt } from "@/lib/prompts/draft_sections_prompt";
 import { buildClaimsPrompt } from "@/lib/prompts/claims_prompt";
 import { prisma } from "@/lib/prisma";
+import { logUsage } from "@/lib/token-usage";
 import type { InterviewAnswers } from "@/types";
 
 // ─── System prompt (lazy-loaded + cached) ────────────────────────────────────
@@ -71,60 +72,68 @@ export function buildInventionContext(answers: InterviewAnswers): string {
 // ─── generateDraftSections ────────────────────────────────────────────────────
 
 /**
- * Calls the AI to generate the 6 patent specification sections
- * (TITLE, BACKGROUND, SUMMARY, DRAWINGS, DETAILED_DESC, ABSTRACT).
- * Claims are generated separately via generateClaims().
- *
- * @param context - Output of buildInventionContext()
- * @returns Record mapping each section key to its generated content string
+ * Calls the AI to generate the 6 patent specification sections.
+ * Logs token usage when userId is provided.
  */
 export async function generateDraftSections(
-  context: string
+  context: string,
+  userId?: string,
+  projectId?: string
 ): Promise<Record<DraftSectionKey, string>> {
   const ai = getAIProvider();
-  const raw = await ai.generateText({
+  const result = await ai.generateText({
     system: getSystemPrompt(),
     prompt: buildDraftSectionsPrompt(context),
     temperature: 0.4,
   });
 
+  if (userId) {
+    await logUsage({ userId, projectId, operation: "DRAFT_SECTIONS", usage: result.usage });
+  }
+
   // Strip any accidental markdown fences
-  const cleaned = raw.replace(/^```json\s*/i, "").replace(/\s*```\s*$/, "").trim();
+  const cleaned = result.content.replace(/^```json\s*/i, "").replace(/\s*```\s*$/, "").trim();
 
   let parsed: { sections: Record<string, string> };
   try {
     parsed = JSON.parse(cleaned) as { sections: Record<string, string> };
   } catch {
     throw new Error(
-      `AI returned invalid JSON for draft sections. Raw output (first 300 chars): ${raw.slice(0, 300)}`
+      `AI returned invalid JSON for draft sections. Raw output (first 300 chars): ${result.content.slice(0, 300)}`
     );
   }
 
   // Only keep valid known keys; fill missing ones with an empty string
-  const result = {} as Record<DraftSectionKey, string>;
+  const sectionsResult = {} as Record<DraftSectionKey, string>;
   for (const key of DRAFT_SECTION_KEYS) {
-    result[key] = (parsed.sections?.[key] ?? "").trim();
+    sectionsResult[key] = (parsed.sections?.[key] ?? "").trim();
   }
-  return result;
+  return sectionsResult;
 }
 
 // ─── generateClaims ──────────────────────────────────────────────────────────
 
 /**
  * Calls the AI to generate the numbered patent claims as plain text.
- * Lower temperature (0.3) for more deterministic, rule-compliant output.
- *
- * @param context - Output of buildInventionContext()
- * @returns Numbered claims as a plain-text string
+ * Logs token usage when userId is provided.
  */
-export async function generateClaims(context: string): Promise<string> {
+export async function generateClaims(
+  context: string,
+  userId?: string,
+  projectId?: string
+): Promise<string> {
   const ai = getAIProvider();
-  const raw = await ai.generateText({
+  const result = await ai.generateText({
     system: getSystemPrompt(),
     prompt: buildClaimsPrompt(context),
     temperature: 0.3,
   });
-  return raw.trim();
+
+  if (userId) {
+    await logUsage({ userId, projectId, operation: "CLAIMS", usage: result.usage });
+  }
+
+  return result.content.trim();
 }
 
 // ─── Dynamic Q&A context builder ─────────────────────────────────────────────
@@ -159,7 +168,7 @@ export function buildInventionContextFromQA(
  * Generates a full patent draft for projects created via the intake pipeline
  * (those with InterviewQuestion + InterviewAnswer rows keyed by question ID).
  */
-export async function generateAllDraftFromDynamic(projectId: string) {
+export async function generateAllDraftFromDynamic(projectId: string, userId?: string) {
   // 1. Load generated questions (ordered)
   const questions = await prisma.interviewQuestion.findMany({
     where: { projectId },
@@ -182,8 +191,8 @@ export async function generateAllDraftFromDynamic(projectId: string) {
   const context = buildInventionContextFromQA(qaPairs);
 
   // 4. Generate sections then claims sequentially
-  const sectionsMap = await generateDraftSections(context);
-  const claimsText = await generateClaims(context);
+  const sectionsMap = await generateDraftSections(context, userId, projectId);
+  const claimsText = await generateClaims(context, userId, projectId);
 
   // 5. Upsert all sections + CLAIMS
   const sectionEntries = Object.entries(sectionsMap) as [string, string][];

@@ -104,7 +104,7 @@ export default function NewProjectPage() {
   return (
     <main className="max-w-2xl mx-auto px-4 py-12">
       <div className="mb-8">
-        <Link href="/" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+        <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
@@ -289,7 +289,7 @@ export default function NewProjectPage() {
 
             {/* Actions */}
             <div className="flex items-center justify-between pt-2">
-              <Link href="/"><Button variant="ghost" type="button" disabled={isSubmitting}>Cancel</Button></Link>
+              <Link href="/dashboard"><Button variant="ghost" type="button" disabled={isSubmitting}>Cancel</Button></Link>
               <Button type="submit" loading={isSubmitting} disabled={isSubmitting}>
                 Create Project &amp; Generate Questions
                 {!isSubmitting && (

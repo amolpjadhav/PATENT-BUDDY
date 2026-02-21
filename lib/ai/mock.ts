@@ -6,7 +6,7 @@
  * DISCLAIMER: Outputs from this provider are placeholder text only.
  * They do NOT constitute legal advice of any kind.
  */
-import type { AIProvider, GenerateTextOptions } from "./provider";
+import type { AIProvider, GenerateTextOptions, GenerateTextResult } from "./provider";
 
 // ─── Mock sections JSON ───────────────────────────────────────────────────────
 
@@ -32,7 +32,7 @@ const MOCK_SECTIONS_JSON = JSON.stringify({
     ].join("\n"),
     DETAILED_DESC: [
       "Referring now to the drawings, FIG. 1 illustrates the assembled self-watering plant pot system (10) according to a preferred embodiment of the present invention. The system (10) comprises a plant pot body (50), a water reservoir (100), a capacitive moisture sensor (102), a float valve assembly (104), a drip tube (106), a sensor probe (108), a threshold dial (110), and a low-water indicator flag (112).",
-      "The plant pot body (50) is formed from high-density polyethylene (HDPE) and is configured to receive a standard potted plant root ball. The body (50) defines an inner cavity for soil and an outer annular chamber that houses the reservoir (100). The reservoir (100) has a nominal capacity of 500 mL and is accessible via a top fill port (114) sealed with a removable cap.",
+      "The plant pot body (50) is formed from high-density polyethylene (HDPE) and is configured to receive a standard potted plant root ball. The body (50) defines an inner cavity for soil and outer annular chamber that houses the reservoir (100). The reservoir (100) has a nominal capacity of 500 mL and is accessible via a top fill port (114) sealed with a removable cap.",
       "The capacitive moisture sensor (102) comprises a pair of stainless steel electrodes embedded in the inner wall of the pot body (50). The sensor (102) measures the dielectric constant of the surrounding soil, which varies with water content, and outputs a voltage signal proportional to soil relative humidity (0%–100%).",
       "The float valve assembly (104) is positioned at the base of the reservoir (100). The assembly (104) includes a buoyancy float (116) mechanically linked to a silicone valve seat (118). When soil moisture detected by the sensor (102) falls below the threshold value set by the threshold dial (110), a mechanical linkage (120) disengages the float (116) from its closed position, allowing water to flow from the reservoir (100) through the drip tube (106) into the soil. When moisture reaches the threshold, the linkage (120) returns the float (116) to the closed position.",
       "The threshold dial (110) is located on the exterior of the pot body (50) and is rotatable through a range corresponding to soil moisture setpoints of 20% to 80% relative humidity. A position indicator on the dial (110) aligns with graduated markings on the pot body (50) to allow the user to set the desired moisture level visually.",
@@ -72,16 +72,18 @@ const MOCK_CLAIMS_TEXT = `\
 
 // ─── Mock provider ────────────────────────────────────────────────────────────
 
+const MOCK_USAGE = { promptTokens: 500, completionTokens: 1000, totalTokens: 1500, model: "mock" };
+
 export class MockAIProvider implements AIProvider {
-  async generateText({ prompt }: GenerateTextOptions): Promise<string> {
+  async generateText({ prompt }: GenerateTextOptions): Promise<GenerateTextResult> {
     // Detect sections vs. claims request by prompt content
     const isSectionsRequest =
       prompt.includes('"sections"') ||
       (prompt.includes("TITLE") && prompt.includes("BACKGROUND") && prompt.includes("JSON"));
 
-    if (isSectionsRequest) {
-      return MOCK_SECTIONS_JSON;
-    }
-    return MOCK_CLAIMS_TEXT;
+    return {
+      content: isSectionsRequest ? MOCK_SECTIONS_JSON : MOCK_CLAIMS_TEXT,
+      usage: MOCK_USAGE,
+    };
   }
 }

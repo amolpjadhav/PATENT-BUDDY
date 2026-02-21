@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildDocx } from "@/lib/docx";
-import { getSessionIdsFromRequest } from "@/lib/session";
+import { requireAuthUser } from "@/lib/auth-helpers";
 
 // GET /api/export/[id] — download project as DOCX
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const ids = getSessionIdsFromRequest(req.cookies.get("patent_buddy_session")?.value);
-  if (!ids.includes(id)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  }
+  const authResult = await requireAuthUser();
+  if (authResult instanceof NextResponse) return authResult;
+  const { id: userId } = authResult;
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -17,6 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   });
 
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (project.userId !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (project.sections.length === 0) {
     return NextResponse.json({ error: "No draft to export" }, { status: 400 });
   }

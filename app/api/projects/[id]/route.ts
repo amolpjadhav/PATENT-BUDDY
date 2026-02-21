@@ -1,17 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionIdsFromRequest } from "@/lib/session";
+import { requireAuthUser } from "@/lib/auth-helpers";
 
-function sessionIds(req: NextRequest) {
-  return getSessionIdsFromRequest(req.cookies.get("patent_buddy_session")?.value);
+async function verifyOwnership(projectId: string, userId: string) {
+  const owned = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { userId: true },
+  });
+  if (!owned) return "notfound";
+  if (owned.userId !== userId) return "forbidden";
+  return "ok";
 }
 
 // GET /api/projects/[id]
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!sessionIds(req).includes(id)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  }
+  const authResult = await requireAuthUser();
+  if (authResult instanceof NextResponse) return authResult;
+  const { id: userId } = authResult;
+
+  const check = await verifyOwnership(id, userId);
+  if (check === "notfound") return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (check === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -29,9 +39,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // PATCH /api/projects/[id] — update title or jurisdiction
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!sessionIds(req).includes(id)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  }
+  const authResult = await requireAuthUser();
+  if (authResult instanceof NextResponse) return authResult;
+  const { id: userId } = authResult;
+
+  const check = await verifyOwnership(id, userId);
+  if (check === "notfound") return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (check === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
   const updated = await prisma.project.update({
@@ -47,18 +61,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 // DELETE /api/projects/[id]
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const ids = sessionIds(req);
-  if (!ids.includes(id)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  }
+  const authResult = await requireAuthUser();
+  if (authResult instanceof NextResponse) return authResult;
+  const { id: userId } = authResult;
+
+  const check = await verifyOwnership(id, userId);
+  if (check === "notfound") return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (check === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   await prisma.project.delete({ where: { id } });
-
-  const response = NextResponse.json({ success: true });
-  response.cookies.set(
-    "patent_buddy_session",
-    JSON.stringify(ids.filter((x) => x !== id)),
-    { httpOnly: true, sameSite: "lax", maxAge: 60 * 60 * 24 * 365, path: "/" }
-  );
-  return response;
+  return NextResponse.json({ success: true });
 }
