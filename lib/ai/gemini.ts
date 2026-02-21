@@ -10,7 +10,7 @@ export class GeminiProvider implements AIProvider {
   private client: OpenAI;
   private model: string;
 
-  constructor(apiKey: string, model = "gemini-2.5-flash") {
+  constructor(apiKey: string, model = "gemini-2.0-flash") {
     this.client = new OpenAI({
       apiKey,
       baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",

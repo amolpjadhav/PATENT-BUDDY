@@ -5,6 +5,7 @@ import { checkRateLimit, logUsage } from "@/lib/token-usage";
 import { getAIProvider } from "@/lib/ai";
 import { buildExtractionPrompt } from "@/lib/prompts/extraction_prompt";
 import { buildQuestionGenerationPrompt } from "@/lib/prompts/question_generation_prompt";
+import { extractJsonFromText } from "@/lib/json-utils";
 import type { ExtractedInventionJson, GeneratedQuestion } from "@/types";
 
 export const maxDuration = 120;
@@ -48,8 +49,7 @@ export async function POST(
       temperature: 0.2,
     });
     await logUsage({ userId, projectId: id, operation: "EXTRACTION", usage: result.usage });
-    const cleaned = result.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    extractedJson = JSON.parse(cleaned) as ExtractedInventionJson;
+    extractedJson = extractJsonFromText<ExtractedInventionJson>(result.content, "Extraction");
   } catch (err) {
     console.error("[generate-questions] Extraction failed:", err);
     return NextResponse.json({ error: "Extraction step failed. Please try again." }, { status: 500 });
@@ -73,8 +73,7 @@ export async function POST(
       temperature: 0.3,
     });
     await logUsage({ userId, projectId: id, operation: "QUESTIONS", usage: result.usage });
-    const cleaned = result.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    questions = JSON.parse(cleaned) as GeneratedQuestion[];
+    questions = extractJsonFromText<GeneratedQuestion[]>(result.content, "Questions");
     if (!Array.isArray(questions) || questions.length === 0) {
       throw new Error("Empty question array returned");
     }

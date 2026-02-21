@@ -4,6 +4,7 @@ import { getAIProvider } from "@/lib/ai";
 import { buildQualityCheckPrompt } from "@/lib/prompts/quality";
 import { requireAuthUser } from "@/lib/auth-helpers";
 import { checkRateLimit, logUsage } from "@/lib/token-usage";
+import { extractJsonFromText } from "@/lib/json-utils";
 import { SECTION_ORDER, SECTION_LABELS, type QualityIssueInput } from "@/types";
 
 // POST /api/quality/[id] — run quality checks, persist individual QualityIssue rows
@@ -47,8 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       temperature: 0.2,
     });
     await logUsage({ userId, projectId: id, operation: "QUALITY_CHECK", usage: result.usage });
-    const cleaned = result.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    const parsed = JSON.parse(cleaned) as { issues: QualityIssueInput[] };
+    const parsed = extractJsonFromText<{ issues: QualityIssueInput[] }>(result.content, "Quality check");
     aiIssues = parsed.issues ?? [];
   } catch (err) {
     console.error("AI quality check failed:", err);
